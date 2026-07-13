@@ -1,0 +1,269 @@
+import os
+import shutil
+import threading
+from pathlib import Path
+from PIL import Image
+from PIL.ExifTags import TAGS
+from datetime import datetime
+import tkinter as tk
+from tkinter import filedialog, messagebox
+from tkinter import ttk
+
+class PhotoOrganizerApp:
+    def __init__(self, root):
+        self.root = root
+        self.root.title("Photo Organizer")
+        self.root.geometry("800x300")
+        self.root.minsize(600, 200)
+        
+        self.source_path = tk.StringVar(value="Quellordner wählen...")
+        self.target_path = tk.StringVar(value="Zielordner wählen...")
+        
+        self.setup_ui()
+    
+    def setup_ui(self):
+        """Erstellt die Benutzeroberfläche"""
+        
+        # Hauptcontainer
+        main_frame = ttk.Frame(self.root, padding="20")
+        main_frame.pack(fill=tk.BOTH, expand=True)
+        
+        # Obere Reihe - Buttons zum Pfad wählen
+        button_frame = ttk.Frame(main_frame)
+        button_frame.pack(fill=tk.X, expand=False, pady=(0, 20))
+        
+        # Linker Button - Quellordner
+        ttk.Button(
+            button_frame, 
+            text="📁 Quellordner wählen",
+            command=self.choose_source,
+            width=35
+        ).pack(side=tk.LEFT, fill=tk.BOTH, expand=True, padx=(0, 10))
+        
+        # Rechter Button - Zielordner
+        ttk.Button(
+            button_frame, 
+            text="📁 Zielordner wählen",
+            command=self.choose_target,
+            width=35
+        ).pack(side=tk.RIGHT, fill=tk.BOTH, expand=True, padx=(10, 0))
+        
+        # Mittlere Reihe - Pfade anzeigen
+        path_frame = ttk.Frame(main_frame)
+        path_frame.pack(fill=tk.BOTH, expand=True, pady=20)
+        
+        # Quellpfad
+        ttk.Label(path_frame, text="Quellordner:", font=("Arial", 11, "bold")).pack(anchor=tk.W, pady=(0, 5))
+        self.source_label = ttk.Label(
+            path_frame, 
+            text=self.source_path.get(),
+            font=("Arial", 12),
+            foreground="gray",
+            wraplength=500,
+            justify=tk.LEFT
+        )
+        self.source_label.pack(anchor=tk.W, fill=tk.BOTH, padx=10, pady=(0, 15))
+        
+        # Zieldpfad
+        ttk.Label(path_frame, text="Zielordner:", font=("Arial", 11, "bold")).pack(anchor=tk.W, pady=(0, 5))
+        self.target_label = ttk.Label(
+            path_frame, 
+            text=self.target_path.get(),
+            font=("Arial", 12),
+            foreground="gray",
+            wraplength=500,
+            justify=tk.LEFT
+        )
+        self.target_label.pack(anchor=tk.W, fill=tk.BOTH, padx=10, pady=(0, 15))
+        
+        # Untere Reihe - Start Button
+        bottom_frame = ttk.Frame(main_frame)
+        bottom_frame.pack(fill=tk.X, expand=False, pady=(20, 0))
+        
+        self.start_button = ttk.Button(
+            bottom_frame,
+            text="▶ Organisieren starten",
+            command=self.start_organization
+        )
+        self.start_button.pack(fill=tk.X, expand=True, padx=(0, 10))
+        
+        # Info-Label
+        self.info_label = ttk.Label(
+            bottom_frame,
+            text="Bereit",
+            font=("Arial", 10),
+            foreground="green"
+        )
+        self.info_label.pack(side=tk.LEFT)
+    
+    def choose_source(self):
+        """Wählt den Quellordner"""
+        folder = filedialog.askdirectory(title="Quellordner mit Fotos wählen")
+        if folder:
+            self.source_path.set(folder)
+            self.source_label.config(text=folder, foreground="black")
+    
+    def choose_target(self):
+        """Wählt den Zielordner"""
+        folder = filedialog.askdirectory(title="Zielordner wählen")
+        if folder:
+            self.target_path.set(folder)
+            self.target_label.config(text=folder, foreground="black")
+    
+    def start_organization(self):
+        """Startet die Organisation in einem separaten Thread"""
+        source = self.source_path.get()
+        target = self.target_path.get()
+        
+        # Validierung
+        if source == "Quellordner wählen..." or target == "Zielordner wählen...":
+            messagebox.showwarning("Fehler", "Bitte wähle Quell- und Zielordner!")
+            return
+        
+        if not Path(source).exists():
+            messagebox.showerror("Fehler", f"Quellordner existiert nicht:\n{source}")
+            return
+        
+        # Starte Organisation in separatem Thread (verhindert Einfrieren des UI)
+        thread = threading.Thread(target=self.organize_with_progress, args=(source, target))
+        thread.daemon = True
+        thread.start()
+    
+    def organize_with_progress(self, source_dir, target_dir):
+        """Organisiert Dateien und zeigt Fortschritt"""
+        try:
+            self.start_button.config(state=tk.DISABLED)
+            self.info_label.config(text="Läuft...", foreground="orange")
+            self.root.update()
+            
+            result = self.organize_photos(source_dir, target_dir)
+            
+            if result:
+                self.info_label.config(
+                    text=f"✓ Fertig! {result['organized']}/{result['found']} Dateien organisiert",
+                    foreground="green"
+                )
+                messagebox.showinfo(
+                    "Erfolg",
+                    f"Verarbeitung abgeschlossen!\n\n"
+                    f"Gefundene Dateien: {result['found']}\n"
+                    f"Organisiert: {result['organized']}\n\n"
+                    f"Zielordner: {target_dir}"
+                )
+            
+        except Exception as e:
+            self.info_label.config(text="Fehler!", foreground="red")
+            messagebox.showerror("Fehler", f"Ein Fehler ist aufgetreten:\n{str(e)}")
+        
+        finally:
+            self.start_button.config(state=tk.NORMAL)
+    
+    def get_creation_date(self, file_path):
+        """
+        Extrahiert das Erstellungsdatum aus EXIF-Daten oder Dateimetadaten.
+        Rückgabe: datetime-Objekt oder None
+        """
+        try:
+            # Versuche EXIF-Daten zu lesen
+            image = Image.open(file_path)
+            exif_data = image._getexif()
+            
+            if exif_data:
+                for tag_id, value in exif_data.items():
+                    tag = TAGS.get(tag_id, tag_id)
+                    if tag in ["DateTimeOriginal", "DateTime"]:
+                        # Format: "2024:02:15 10:30:45"
+                        date_obj = datetime.strptime(str(value), "%Y:%m:%d %H:%M:%S")
+                        return date_obj
+        except Exception as e:
+            pass
+        
+        # Fallback: Nutze Dateimetadaten (Änderungsdatum)
+        try:
+            timestamp = os.path.getmtime(file_path)
+            date_obj = datetime.fromtimestamp(timestamp)
+            return date_obj
+        except Exception as e:
+            return None
+    
+    def organize_photos(self, source_dir, target_dir):
+        """
+        Organisiert Fotos und Videos nach Erstellungsdatum.
+        Format: M-YYYY (z.B. 2-2024 für Februar 2024)
+        """
+        
+        source_path = Path(source_dir).expanduser()
+        target_path = Path(target_dir).expanduser()
+        
+        # Validierung
+        if not source_path.exists() or not source_path.is_dir():
+            raise Exception(f"Quellordner '{source_dir}' ist ungültig")
+        
+        # Zielordner erstellen
+        target_path.mkdir(parents=True, exist_ok=True)
+        
+        # Unterstützte Dateitypen
+        supported_extensions = {'.jpg', '.jpeg', '.png', '.gif', '.bmp', '.webp', 
+                               '.mp4', '.mov', '.avi', '.mkv', '.flv', '.wmv', '.m4v'}
+        
+        # Durch alle Dateien in Ordnern und Unterordnern gehen
+        file_count = 0
+        organized_count = 0
+        
+        for root, dirs, files in os.walk(source_path):
+            for file in files:
+                file_path = Path(root) / file
+                file_ext = file_path.suffix.lower()
+                
+                # Prüfe, ob Dateityp unterstützt ist
+                if file_ext not in supported_extensions:
+                    continue
+                
+                file_count += 1
+                
+                # Erstellungsdatum auslesen
+                date_obj = self.get_creation_date(str(file_path))
+                
+                if date_obj:
+                    # Ordnername im Format M-YYYY (z.B. 2-2024)
+                    folder_name = date_obj.strftime("%-m-%Y")  # %-m = Monat ohne führende Null
+                    
+                    # Für Windows: "%#m-%Y"
+                    if os.name == 'nt':
+                        folder_name = date_obj.strftime("%#m-%Y")
+                    
+                    target_folder = target_path / folder_name
+                    target_folder.mkdir(parents=True, exist_ok=True)
+                    
+                    # Zieldatei-Pfad
+                    target_file = target_folder / file_path.name
+                    
+                    # Wenn Datei bereits existiert, füge Nummer hinzu
+                    if target_file.exists():
+                        name, ext = file_path.stem, file_path.suffix
+                        counter = 1
+                        while (target_folder / f"{name}_{counter}{ext}").exists():
+                            counter += 1
+                        target_file = target_folder / f"{name}_{counter}{ext}"
+                    
+                    try:
+                        # Kopiere Datei
+                        shutil.copy2(file_path, target_file)
+                        organized_count += 1
+                    except Exception as e:
+                        pass
+        
+        return {
+            'found': file_count,
+            'organized': organized_count
+        }
+
+
+def main():
+    root = tk.Tk()
+    app = PhotoOrganizerApp(root)
+    root.mainloop()
+
+
+if __name__ == "__main__":
+    main()
