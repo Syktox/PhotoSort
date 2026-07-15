@@ -252,11 +252,10 @@ class PhotoOrganizerApp:
     
     def get_creation_date(self, file_path):
         """
-        Extrahiert das Erstellungsdatum aus EXIF-Daten oder Dateimetadaten.
+        Extrahiert das Aufnahmedatum aus EXIF-Daten.
         Rückgabe: datetime-Objekt oder None
         """
         try:
-            # Versuche EXIF-Daten zu lesen
             image = Image.open(file_path)
             exif_data = image._getexif()
             
@@ -264,18 +263,22 @@ class PhotoOrganizerApp:
                 for tag_id, value in exif_data.items():
                     tag = TAGS.get(tag_id, tag_id)
                     if tag in ["DateTimeOriginal", "DateTime"]:
-                        # Format: "2024:02:15 10:30:45"
                         date_obj = datetime.strptime(str(value), "%Y:%m:%d %H:%M:%S")
                         return date_obj
-        except Exception as e:
+        except Exception:
             pass
         
-        # Fallback: Nutze Dateimetadaten (Änderungsdatum)
+        return None
+
+    def get_modification_date(self, file_path):
+        """
+        Liest das Änderungsdatum der Datei.
+        Rückgabe: datetime-Objekt oder None
+        """
         try:
             timestamp = os.path.getmtime(file_path)
-            date_obj = datetime.fromtimestamp(timestamp)
-            return date_obj
-        except Exception as e:
+            return datetime.fromtimestamp(timestamp)
+        except Exception:
             return None
     
     def organize_photos(self, source_dir, target_dir):
@@ -338,8 +341,19 @@ class PhotoOrganizerApp:
                 
                 file_count += 1
                 
-                # Erstellungsdatum auslesen
-                date_obj = self.get_creation_date(str(file_path))
+                # Aufnahmedatum und Änderungsdatum auslesen
+                capture_date = self.get_creation_date(str(file_path))
+                modification_date = self.get_modification_date(str(file_path))
+                
+                # Wenn Änderungsdatum älter ist als Aufnahmedatum, verwende Änderungsdatum.
+                # Ansonsten verwende das Aufnahmedatum. Fallback auf vorhandenes Datum.
+                date_obj = None
+                if capture_date and modification_date:
+                    date_obj = modification_date if modification_date < capture_date else capture_date
+                elif capture_date:
+                    date_obj = capture_date
+                else:
+                    date_obj = modification_date
                 
                 if date_obj:
                     # Erst den Jahresordner, dann den Monatsunterordner erstellen
