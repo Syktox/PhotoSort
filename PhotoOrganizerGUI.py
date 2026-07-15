@@ -295,8 +295,18 @@ class PhotoOrganizerApp:
         target_path.mkdir(parents=True, exist_ok=True)
         
         # Unterstützte Dateitypen
-        supported_extensions = {'.jpg', '.jpeg', '.png', '.gif', '.bmp', '.webp', 
-                               '.mp4', '.mov', '.avi', '.mkv', '.flv', '.wmv', '.m4v'}
+        supported_extensions = {
+            # Fotoformate
+            '.jpg', '.jpeg', '.png', '.gif', '.bmp', '.webp', '.tif', '.tiff',
+            '.heic', '.heif', '.raw', '.arw', '.cr2', '.nef', '.orf', '.sr2',
+            '.dng', '.rw2', '.raf', '.pef', '.mos', '.mrw', '.kdc', '.erf',
+            '.ai', '.eps', '.psd',
+            # Videoformate
+            '.mp4', '.mov', '.avi', '.mkv', '.flv', '.wmv', '.m4v', '.webm',
+            '.3gp', '.3g2', '.mts', '.m2ts', '.ts', '.vob', '.rm', '.rmvb',
+            '.mpg', '.mpeg', '.mpe', '.mxf', '.asf', '.f4v', '.dv', '.divx',
+            '.xvid'
+        }
         
         # Durch alle Dateien in Ordnern und Unterordnern gehen
         file_count = 0
