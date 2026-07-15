@@ -226,11 +226,10 @@ class PhotoOrganizerApp:
                 
                 if date_obj:
                     # Ordnername im Format M-YYYY (z.B. 2-2024)
-                    folder_name = date_obj.strftime("%-m-%Y")  # %-m = Monat ohne führende Null
-                    
-                    # Für Windows: "%#m-%Y"
-                    if os.name == 'nt':
+                    if os.name == 'nt':  # Windows
                         folder_name = date_obj.strftime("%#m-%Y")
+                    else:  # macOS, Linux
+                        folder_name = date_obj.strftime("%-m-%Y")
                     
                     target_folder = target_path / folder_name
                     target_folder.mkdir(parents=True, exist_ok=True)
