@@ -317,13 +317,11 @@ class PhotoOrganizerApp:
                 date_obj = self.get_creation_date(str(file_path))
                 
                 if date_obj:
-                    # Ordnername im Format M-YYYY (z.B. 2-2024)
-                    if os.name == 'nt':  # Windows
-                        folder_name = date_obj.strftime("%#m-%Y")
-                    else:  # macOS, Linux
-                        folder_name = date_obj.strftime("%-m-%Y")
+                    # Erst den Jahresordner, dann den Monatsunterordner erstellen
+                    year_folder = str(date_obj.year)
+                    month_folder = date_obj.strftime("%B")
                     
-                    target_folder = target_path / folder_name
+                    target_folder = target_path / year_folder / month_folder
                     target_folder.mkdir(parents=True, exist_ok=True)
                     
                     # Zieldatei-Pfad
