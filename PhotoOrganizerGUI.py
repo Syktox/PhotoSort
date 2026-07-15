@@ -309,6 +309,21 @@ class PhotoOrganizerApp:
                 
                 # Prüfe, ob Dateityp unterstützt ist
                 if file_ext not in supported_extensions:
+                    rest_folder = target_path / "Rest"
+                    rest_folder.mkdir(parents=True, exist_ok=True)
+                    target_file = rest_folder / file_path.name
+
+                    if target_file.exists():
+                        name, ext = file_path.stem, file_path.suffix
+                        counter = 1
+                        while (rest_folder / f"{name}_{counter}{ext}").exists():
+                            counter += 1
+                        target_file = rest_folder / f"{name}_{counter}{ext}"
+
+                    try:
+                        shutil.copy2(file_path, target_file)
+                    except Exception:
+                        pass
                     continue
                 
                 file_count += 1
