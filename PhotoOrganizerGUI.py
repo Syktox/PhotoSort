@@ -319,7 +319,7 @@ class PhotoOrganizerApp:
                 if date_obj:
                     # Erst den Jahresordner, dann den Monatsunterordner erstellen
                     year_folder = str(date_obj.year)
-                    month_folder = date_obj.strftime("%B")
+                    month_folder = str(date_obj.month)
                     
                     target_folder = target_path / year_folder / month_folder
                     target_folder.mkdir(parents=True, exist_ok=True)
