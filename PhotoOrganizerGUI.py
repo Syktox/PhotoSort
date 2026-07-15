@@ -1,3 +1,4 @@
+import hashlib
 import os
 import shutil
 import threading
@@ -13,8 +14,8 @@ class PhotoOrganizerApp:
     def __init__(self, root):
         self.root = root
         self.root.title("Photo Organizer")
-        self.root.geometry("800x300")
-        self.root.minsize(600, 200)
+        self.root.geometry("1000x420")
+        self.root.resizable(False, False)
         
         self.source_path = tk.StringVar(value="Quellordner wählen...")
         self.target_path = tk.StringVar(value="Zielordner wählen...")
@@ -38,7 +39,7 @@ class PhotoOrganizerApp:
             text="📁 Quellordner wählen",
             command=self.choose_source,
             width=35
-        ).pack(side=tk.LEFT, fill=tk.BOTH, expand=True, padx=(0, 10))
+        ).pack(side=tk.LEFT, fill=tk.BOTH, expand=True, padx=(0, 10), ipady=16)
         
         # Rechter Button - Zielordner
         ttk.Button(
@@ -46,7 +47,7 @@ class PhotoOrganizerApp:
             text="📁 Zielordner wählen",
             command=self.choose_target,
             width=35
-        ).pack(side=tk.RIGHT, fill=tk.BOTH, expand=True, padx=(10, 0))
+        ).pack(side=tk.RIGHT, fill=tk.BOTH, expand=True, padx=(10, 0), ipady=16)
         
         # Mittlere Reihe - Pfade anzeigen
         path_frame = ttk.Frame(main_frame)
@@ -59,10 +60,10 @@ class PhotoOrganizerApp:
             text=self.source_path.get(),
             font=("Arial", 12),
             foreground="gray",
-            wraplength=500,
+            wraplength=700,
             justify=tk.LEFT
         )
-        self.source_label.pack(anchor=tk.W, fill=tk.BOTH, padx=10, pady=(0, 15))
+        self.source_label.pack(anchor=tk.W, fill=tk.BOTH, padx=10, pady=(5, 20))
         
         # Zieldpfad
         ttk.Label(path_frame, text="Zielordner:", font=("Arial", 11, "bold")).pack(anchor=tk.W, pady=(0, 5))
@@ -71,10 +72,10 @@ class PhotoOrganizerApp:
             text=self.target_path.get(),
             font=("Arial", 12),
             foreground="gray",
-            wraplength=500,
+            wraplength=700,
             justify=tk.LEFT
         )
-        self.target_label.pack(anchor=tk.W, fill=tk.BOTH, padx=10, pady=(0, 15))
+        self.target_label.pack(anchor=tk.W, fill=tk.BOTH, padx=10, pady=(5, 20))
         
         # Untere Reihe - Start Button
         bottom_frame = ttk.Frame(main_frame)
@@ -85,7 +86,14 @@ class PhotoOrganizerApp:
             text="▶ Organisieren starten",
             command=self.start_organization
         )
-        self.start_button.pack(fill=tk.X, expand=True, padx=(0, 10))
+        self.start_button.pack(fill=tk.X, expand=True, padx=(0, 10), pady=(0, 8))
+        
+        self.delete_button = ttk.Button(
+            bottom_frame,
+            text="🗑️ Duplikate löschen",
+            command=self.delete_duplicates
+        )
+        self.delete_button.pack(fill=tk.X, expand=True, padx=(0, 10))
         
         # Info-Label
         self.info_label = ttk.Label(
@@ -94,7 +102,7 @@ class PhotoOrganizerApp:
             font=("Arial", 10),
             foreground="green"
         )
-        self.info_label.pack(side=tk.LEFT)
+        self.info_label.pack(side=tk.LEFT, pady=(10, 0))
     
     def choose_source(self):
         """Wählt den Quellordner"""
@@ -128,6 +136,90 @@ class PhotoOrganizerApp:
         thread = threading.Thread(target=self.organize_with_progress, args=(source, target))
         thread.daemon = True
         thread.start()
+    
+    def delete_duplicates(self):
+        """Löscht doppelte Dateien aus einem ausgewählten Ordner"""
+        folder = filedialog.askdirectory(title="Ordner für Duplikate wählen")
+        if not folder:
+            return
+        
+        if not Path(folder).exists():
+            messagebox.showerror("Fehler", f"Ordner existiert nicht:\n{folder}")
+            return
+        
+        self.start_button.config(state=tk.DISABLED)
+        self.delete_button.config(state=tk.DISABLED)
+        self.info_label.config(text="Duplikate prüfen...", foreground="orange")
+        self.root.update()
+        
+        try:
+            result = self.remove_duplicate_files(folder)
+            self.info_label.config(
+                text=f"✓ {result['deleted']} Duplikate gelöscht",
+                foreground="green"
+            )
+            messagebox.showinfo(
+                "Fertig",
+                f"Duplikate gelöscht: {result['deleted']}\n"
+                f"Behaltene Dateien: {result['kept']}\n"
+                f"Gescannt: {result['scanned']}"
+            )
+        except Exception as e:
+            self.info_label.config(text="Fehler!", foreground="red")
+            messagebox.showerror("Fehler", f"Ein Fehler ist aufgetreten:\n{str(e)}")
+        finally:
+            self.start_button.config(state=tk.NORMAL)
+            self.delete_button.config(state=tk.NORMAL)
+    
+    def hash_file(self, file_path):
+        """Berechnet einen SHA-256 Hash für eine Datei."""
+        hasher = hashlib.sha256()
+        with open(file_path, 'rb') as f:
+            for chunk in iter(lambda: f.read(8192), b''):
+                hasher.update(chunk)
+        return hasher.hexdigest()
+    
+    def remove_duplicate_files(self, folder):
+        """Entfernt doppelte Dateien im Ordner basierend auf ihrem Inhalt."""
+        folder_path = Path(folder).expanduser()
+        size_groups = {}
+        
+        for root, dirs, files in os.walk(folder_path):
+            for file in files:
+                file_path = Path(root) / file
+                try:
+                    size = file_path.stat().st_size
+                except OSError:
+                    continue
+                size_groups.setdefault(size, []).append(file_path)
+        
+        hashes = {}
+        deleted = 0
+        kept = 0
+        scanned = 0
+        
+        for paths in size_groups.values():
+            if len(paths) == 1:
+                kept += 1
+                continue
+            for file_path in paths:
+                file_hash = self.hash_file(file_path)
+                scanned += 1
+                if file_hash in hashes:
+                    try:
+                        file_path.unlink()
+                        deleted += 1
+                    except OSError:
+                        pass
+                else:
+                    hashes[file_hash] = file_path
+                    kept += 1
+        
+        return {
+            'scanned': scanned,
+            'deleted': deleted,
+            'kept': kept
+        }
     
     def organize_with_progress(self, source_dir, target_dir):
         """Organisiert Dateien und zeigt Fortschritt"""
